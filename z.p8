@@ -6,6 +6,7 @@ __lua__
 
 function _init()
 	-- debug related
+	freemove=true -- count movement as action
 	debug_enabled=true
 	debug_stack={}
 	
@@ -32,7 +33,8 @@ function _update()
 	end
 	if state==states.in_game
 		or state==states.in_game_action_selection 
-		or state==states.in_game_move then
+		or state==states.in_game_move
+	 or state==states.in_game_enter_building then
 	 update_game()
 	end
 end
@@ -44,7 +46,8 @@ function _draw()
 	end
 	if state==states.in_game 
 		or state==states.in_game_action_selection 
-		or state==states.in_game_move then
+		or state==states.in_game_move 
+		or state==states.in_game_enter_building then
 	 draw_game()
 	end
 	-- debug mode
@@ -59,7 +62,7 @@ end
 
 function update_title_screen()
 	if btnp(❎) or btnp(🅾️) then
-	 state=states.in_game_action_selection
+		state=states.in_game_action_selection
 	end
 end
 
@@ -166,6 +169,10 @@ function update_game()
 	if state==states.in_game_move then
 		update_game_move()
 	end
+	-- enter building
+	if state==states.in_game_enter_building then
+		update_game_enter_building()
+	end
 end
 
 function draw_game()
@@ -174,6 +181,10 @@ function draw_game()
 	
 	if state==states.in_game_action_selection then
 		draw_game_action_selection()
+	end
+	
+	if state==states.in_game_enter_building then
+		draw_game_enter_building()
 	end
 	
 	draw_ui()
@@ -200,8 +211,6 @@ function draw_map()
 		
 		for x=0,5 do
 			for y=0,5 do
-				printh(srcx+x..","..srcy+y)
-				printh(mget(srcx+x,srcy+y))
 				mset(
 					destx+x,desty+y,
 					mget(srcx+x,srcy+y)
@@ -301,8 +310,10 @@ function update_game_move()
 	if ((p.x~=newx or p.y~=newy) and can_go_to(newx,newy)) then
 		p.x=newx
 		p.y=newy
-		p.actions-=1
+		if (not freemove) p.actions-=1
 	end
+	
+	get_building_for_player()
 end
 
 function can_go_to(x,y)
@@ -321,6 +332,43 @@ end
 function do_action()
 	if (current_action.name=="move") state=states.in_game_move
 end
+
+--[[===========================
+
+	in_game_enter_building
+
+=============================]]
+
+function update_game_enter_building()
+	if btnp(❎) 
+		or btnp(🅾️)
+		--or btnp(⬅️)
+		--or btnp(➡️)
+		--or btnp(⬇️)
+		--or btnp(⬆️)
+		then
+		state=states.in_game_move
+	end
+end
+
+function draw_game_enter_building()
+	local p=players[current_player]
+	local place=p.building.id
+	rectfill(17,66,122,74,1)
+	rectfill(15,64,120,72,2)
+	print(
+		place,
+		(122-17-#place*4)/2+17+1,
+		67,
+		1
+	)
+	print(
+		place,
+		(122-17-#place*4)/2+17,
+		66,
+		7
+	)
+end
 -->8
 -- players
 
@@ -337,6 +385,7 @@ function init_players()
 			oy=y,	-- offset (for animation)
 			job=job,
 			mirror=false, -- if true, look to the left
+			building=nil, -- building data
 		})
 	end
 end
@@ -532,18 +581,21 @@ layouts = {
 		mapping={x=15,y=0},
 		buildings={
 			{
+				id="1-1",
 				is="special",
 				rects={{1,1,3,3}}
 			},
 			{
+				id="1-2",
 				is="normal",
-				rects={{1,5,2,5}}
+				rects={{1,5,2,6}}
 			},
 			{
+				id="1-3",
 				is="normal",
 				rects={
-					{5,3,5,5},
-					{4,4,4,5}
+					{5,3,6,6},
+					{4,5,6,6}
 				}
 			},
 		}
@@ -552,11 +604,12 @@ layouts = {
 		mapping={x=21,y=0},
 		buildings={
 			{
+				id="2-1",
 				is="special",
 				rects={
-					{1,1,2,5},
+					{1,1,2,6},
 					{3,3,4,4},
-					{5,1,5,5}
+					{5,1,6,6}
 				}
 			},
 		}
@@ -565,6 +618,7 @@ layouts = {
 		mapping={x=27,y=0},
 		buildings={
 			{
+				id="3-1",
 				is="graveyard",
 				rects={{1,1,6,6}}
 			}
@@ -574,14 +628,17 @@ layouts = {
 		mapping={x=15,y=6},
 		buildings={
 			{
+				id="4-1",
 				is="special",
 				rects={{1,1,4,2}}
 			},
 			{
+				id="4-2",
 				is="normal",
 				rects={{5,1,6,6}}
 			},
 			{
+				id="4-3",
 				is="normal",
 				rects={
 					{1,4,3,5},
@@ -594,10 +651,12 @@ layouts = {
 		mapping={x=21,y=6},
 		buildings={
 			{
+				id="5-1",
 				is="normal",
 				rects={{1,1,2,3}}
 			},
 			{
+				id="5-2",
 				is="special",
 				rects={
 					{4,1,6,4},
@@ -614,6 +673,7 @@ states = {
 	in_game=1,
 	in_game_action_selection=2,
 	in_game_move=3,
+	in_game_enter_building=4,
 }
 
 -- players jobs
@@ -709,6 +769,54 @@ actions = {
 		description="end the current turn",
 	},
 }
+-->8
+-- building
+
+-- get the building at player position or nil
+function get_building_for_player()
+	local p=players[current_player]
+	local a=nil
+	local relx=0 local rely=0
+	local previous_building_id=nil
+	--printh(p.building)
+	if p.building~=nil then
+		previous_building_id=p.building.id
+	end
+	-- determine which area we are in
+	-- and calculate the player position relative to the area
+	if p.x>1 and p.x<8 and p.y>1 and p.y<8 then
+		a=areas[1]
+		relx=p.x-1 rely=p.y-1
+	elseif p.x>8 and p.x<15 and p.y>1 and p.y<8 then
+		a=areas[2]
+		relx=p.x-8 rely=p.y-1
+	elseif p.x>1 and p.x<8 and p.y>8 and p.y<15 then	
+		a=areas[3]
+		relx=p.x-1 rely=p.y-8
+	elseif p.x>8 and p.x<15 and p.y>8 and p.y<15 then
+		a=areas[4]
+		relx=p.x-8 rely=p.y-8
+	else
+		p.building=nil
+		return
+	end
+	-- check the building in the area
+	for b in all(a.buildings) do
+		for r in all(b.rects) do
+			if relx>=r[1] and relx<=r[3]
+				and rely>=r[2] and rely<=r[4] then
+				p.building=b
+				if previous_building_id~=b.id then
+					state=states.in_game_enter_building
+				end
+				return b
+			end
+		end
+	end
+	p.building=nil
+	return nil
+end
+
 __gfx__
 00000000eeaaa1eeeeaaa1eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000000555555555555555555555555
 00000000eeffff1eeeffff1eee00001eee00001eeeffff1eeeffff1eeeffff1eeeffff1eeeffff1eeeffff1e0770770007770000555555555555555555566555
