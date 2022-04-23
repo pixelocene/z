@@ -13,6 +13,7 @@ function _init()
 	-- game related
 	areas={}
 	players={}
+	game_special_buildings={}
 	target={
 		x=0,
 		y=0,
@@ -141,22 +142,28 @@ function draw_debug()
 		end
 	end
 end
+
+function dump(t, indent, done)
+	done = done or {}
+	indent = indent or 0
+	done[t] = true
+	for key, value in pairs(t) do
+		local spaces=""
+		for i=1,indent do spaces=spaces.."  " end
+		if type(value) == "table" and not done[value] then
+			done[value] = true
+			printh(spaces..key..":")
+			dump(value, indent + 2, done)						done[value] = nil
+		else
+			printh(spaces..key..": "..value)
+		end
+	end
+end
 -->8
 -- game
 
 function init_game()
-	-- pick areas to add to the map
-	repeat
-		local area=layouts[ceil(rnd(#layouts))]
-		-- todo check area not already used before adding it
-		local exists=false
-		for a in all(areas) do
-			if (a==area) exists=true
-		end
-		if not exists then
-			add(areas,area)
-		end
-	until #areas==4
+	init_areas()
 end
 
 function update_game()
@@ -353,7 +360,7 @@ end
 
 function draw_game_enter_building()
 	local p=players[current_player]
-	local place=p.building.id
+	local place=p.building.name
 	rectfill(17,66,122,74,1)
 	rectfill(15,64,120,72,2)
 	print(
@@ -547,31 +554,106 @@ end
 -->8
 -- data
 
+-- objects
+objects = {
+	-- simple building
+	trap={
+		name="trap",
+		description="you lose 1♥",
+		action=function()
+			local p=players[current_player]
+			p.hp-=1
+		end
+	},
+	kitchen_knife={
+		name="kitchen knife",
+		description="a kitchen knife",
+	},
+	bandage={
+		name="bandage",
+		description="recover 1♥",
+	},
+	survival_book={
+		name="survival book",
+		description="add 1 max ♥",
+	},
+	toothpast={
+		name="toothpaste",
+		description="your breath left a little to be\ndesired lately.",
+	},
+	brick={
+		name="brick",
+		description="a red brick to do something with",
+	},
+	-- sanitarium
+	hungry_patient={
+		name="hungry patient",
+		description="he looks pretty dead",
+	},
+	oxygen_bomb={
+		name="oxygen bomb",
+		description="make it explodes baby",
+	},
+	straitjacket={
+		name="straitjacket",
+		description="this is precisely your size,\ncoincidence?"
+	},
+	care_kit={
+		name="care kit",
+		description="recover 2♥",
+	},
+	stethoscope={
+		name="stethoscope",
+		description="???",
+	},
+	antibiotics={
+		name="antibiotics",
+		description="",
+	},
+}
+
 -- buildings
-buildings = {
-	lambda={
-		name="simple building",
-		is="normal"
-	},
-	hospital={
+
+-- every simple building
+normal_building = {
+	name="simple building",
+	objects={
+		objects.trap,
+		objects.kitchen_knife,
+		objects.toothpaste,
+		objects.bandage,
+		objects.survival_book,
+		objects.brick,
+	}
+}
+
+-- graveyard is a special area
+-- and cannot be selected randomly
+graveyard = {
+	name="graveyard",
+}
+
+-- those buildings can be picked randomly
+special_buildings = {
+	{
 		name="hospital",
-		is="special"
 	},
-	graveyard={
-		name="graveyard",
-		is="special"
-	},
-	sanitarium={
+	{
 		name="sanitarium",
-		is="special"
+		objects={
+			objects.hungry_patient,
+			objects.oxygen_bomb,
+			objects.straitjacket,
+			objects.care_kit,
+			objects.stethoscope,
+			objects.antibiotics,
+		}
 	},
-	police={
+	{
 		name="police station",
-		is="special"
 	},
-	garage={
+	{
 		name="garage",
-		is="special"
 	}
 }
 
@@ -770,7 +852,48 @@ actions = {
 	},
 }
 -->8
--- building
+-- area and building
+
+function init_areas()
+	-- pick areas to add to the map
+	repeat
+		local area=layouts[ceil(rnd(#layouts))]
+		-- todo check area not already used before adding it
+		local exists=false
+		for a in all(areas) do
+			if (a==area) exists=true
+		end
+		if not exists then
+			init_buildings(area)
+			add(areas,area)
+		end
+	until #areas==4
+end
+
+function init_buildings(area)
+	for b in all(area.buildings) do
+		local building=nil
+		if b.is=="normal" then
+			building=normal_building
+		elseif b.is=="graveyard" then
+			building=graveyard
+		else
+			-- special buildings are picked randomly
+			repeat
+				local exists=false
+				local spe=special_buildings[ceil(rnd(#special_buildings))]
+				for special_building in all(game_special_buildings) do
+					if special_building.name==b.name then
+						exists=true
+					end
+				end
+				building=spe
+			until not exists
+		end
+		b.name=building.name
+		-- todo copy objects
+	end
+end
 
 -- get the building at player position or nil
 function get_building_for_player()
