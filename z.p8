@@ -9,61 +9,21 @@ function _init()
 	freemove=true -- count movement as action
 	debug_enabled=true
 	debug_stack={}
-	
-	-- game related
-	areas={}
-	players={}
-	game_special_buildings={}
-	target={
-		x=0,
-		y=0,
-		anim=0
-	}
-	init_game()
-	init_players()
-	current_player=1
-	current_action=actions[1]
-	state=states.title_screen
-	turn=1
+
+	init_main_title()
 end
 
-function _update()
-	debug_stack={}
-	if state==states.title_screen then
-		update_title_screen()
-	end
-	if state==states.in_game
-		or state==states.in_game_action_selection 
-		or state==states.in_game_move
-	 or state==states.in_game_enter_building then
-	 update_game()
-	end
+-->8
+-- main title
+
+function init_main_title()
+	_update=update_title_screen
+	_draw=draw_title_screen
 end
-
-function _draw()
-	-- states
-	if state==states.title_screen then
-		draw_title_screen()
-	end
-	if state==states.in_game 
-		or state==states.in_game_action_selection 
-		or state==states.in_game_move 
-		or state==states.in_game_enter_building then
-	 draw_game()
-	end
-	-- debug mode
-	draw_debug()
-end
-
---[[===========================
-
-	title screen
-
-=============================]]
 
 function update_title_screen()
 	if btnp(❎) or btnp(🅾️) then
-		state=states.in_game_action_selection
+		init_game()
 	end
 end
 
@@ -107,25 +67,224 @@ function draw_title_screen()
 	print("press ❎ or 🅾️ to start",15,110)
 end
 
---[[===========================
+-->8
+-- game
 
-	util functions
+function init_game()
+	turn=1
+	game_state="action_selection"
 
-=============================]]
+	areas={}
+	game_special_buildings={}
+	building_message = {
+		message=nil,
+		anim=0
+	}
 
-function get_table_keys(table)
-  local keyset = {}
-  for k,v in pairs(table) do
-    keyset[#keyset + 1] = k
-  end
-  return keyset
+	players={}
+	current_player=1
+
+	target={
+		x=0,
+		y=0,
+		anim=0
+	}
+	
+	current_action=actions[1]
+
+	-- init areas
+	repeat
+		local area=layouts[ceil(rnd(#layouts))]
+		-- todo check area not already used before adding it
+		local exists=false
+		for a in all(areas) do
+			if (a==area) exists=true
+		end
+		if not exists then
+			-- init buildings for the area
+			for b in all(area.buildings) do
+				local building=nil
+				if b.is=="normal" then
+					building=normal_building
+				elseif b.is=="graveyard" then
+					building=graveyard
+				else
+					-- special buildings are picked randomly
+					repeat
+						local exists=false
+						local spe=special_buildings[ceil(rnd(#special_buildings))]
+						for special_building in all(game_special_buildings) do
+							if special_building.name==b.name then
+								exists=true
+							end
+						end
+						building=spe
+					until not exists
+				end
+				b.name=building.name
+				-- @todo copy objects
+			end
+			-- add the area to the map areas
+			add(areas,area)
+		end
+	until #areas==4
+
+	-- init players
+	for i=1,4 do
+		local x,y = rnd_start_location()
+		local job = get_a_job()
+		add(players, {
+			hp=6,
+			actions=4,
+			x=x,		-- pos x on the grid
+			y=y,		-- pos y on the grid
+			ox=x, -- offset (for animation)
+			oy=y,	-- offset (for animation)
+			job=job,
+			mirror=false, -- if true, look to the left
+			building=nil, -- building data
+		})
+	end
+
+	_update=update_game
+	_draw=draw_game
 end
 
---[[===========================
+function update_game()
+	-- update animations
+	update_target()
+	-- update building message timer
+	if building_message.name~=nil then
+		building_message.anim-=0.1
+		if building_message.anim <= 0 then building_message.name=nil end
+	end
+	
+	-- handle user interaction
+	if game_state=="action_selection" then
+		if (btnp(⬅️)) current_player-=1
+		if (btnp(➡️)) current_player+=1	
+		if (btnp(⬇️)) move_to_next_action(1)
+		if (btnp(⬆️)) move_to_next_action(-1)
+		if (btnp(🅾️)) do_action()
+		-- check user selection cycling
+		if (current_player>#players) current_player=1
+		if (current_player<1) current_player=#players
+	end
 
-	debug functions
+	if game_state=="move" then
+		local p=players[current_player]
+		local newx,newy=p.x,p.y
 
-=============================]]
+		if btnp(❎) or p.actions==0 then
+			game_state="action_selection"
+			return
+		end
+
+		if btnp(⬅️) then
+			newx-=1
+			p.mirror=true
+		end
+		if btnp(➡️) then
+			newx+=1
+			p.mirror=false
+		end
+		if (btnp(⬇️)) newy+=1
+		if (btnp(⬆️)) newy-=1
+		
+		-- check the new coordinates before applying them
+		if ((p.x~=newx or p.y~=newy) and current_player_can_go_to(newx,newy)) then
+			p.x=newx
+			p.y=newy
+			if (not freemove) p.actions-=1
+		end
+		
+		-- retrieve the builder the player is in (if any)
+		get_building_for_player()
+	end
+
+	if game_state=="enter_building" then update_game_enter_building() end
+end
+
+-- navigate between the current player actions
+function move_to_next_action(direction)
+	local keys=get_table_keys(actions)
+	local index=nil
+	for i,v in ipairs(actions) do
+		if v.name==current_action.name then
+			index=i
+		end
+	end
+	-- go to next index
+	index+=direction
+	-- check new index is in boundaries
+	if (index>#actions) index=1
+	if (index<1) index=#actions
+	-- modify current action
+	current_action=actions[keys[index]]
+end
+
+-- execute the selected action for the current player
+function do_action()
+	if (current_action.name=="move") game_state="move"
+end
+
+function draw_game()
+	draw_map()
+	draw_players()
+	
+	if game_state=="action_selection" then
+		local p=players[current_player]
+		if current_action.name=="special" then
+			local p=players[current_player]
+			name=p.job.action.name
+			description=p.job.action.description
+		else
+			name=current_action.name
+			description=current_action.description
+		end
+		
+		rectfill(22,93,20+#name*4+4,91+8,1)
+		rectfill(20,91,20+#name*4+2,91+6,2)
+		
+		rectfill(22,102,117,122,1)
+		if p.actions>0 then
+			rectfill(20,100,115,120,2)
+		else
+			rectfill(20,100,115,120,8)
+		end
+		
+		print(name,22,92,7)
+		if p.actions>0 then
+			print(description,22,102,7)
+		else
+			print("no actions remaining",22,102,7)
+		end
+	end
+
+	if building_message.name~=nil then
+		local place=building_message.name
+		rectfill(17,66,122,74,1)
+		rectfill(15,64,120,72,2)
+		print(
+			place,
+			(122-17-#place*4)/2+17+1,
+			67,
+			1
+		)
+		print(
+			place,
+			(122-17-#place*4)/2+17,
+			66,
+			7
+		)
+	end
+	
+	draw_ui()
+	draw_debug()
+end
+
+-->8
+-- tools and debug
 
 function debug(value)
 	add(debug_stack,value)
@@ -143,59 +302,16 @@ function draw_debug()
 	end
 end
 
-function dump(t, indent, done)
-	done = done or {}
-	indent = indent or 0
-	done[t] = true
-	for key, value in pairs(t) do
-		local spaces=""
-		for i=1,indent do spaces=spaces.."  " end
-		if type(value) == "table" and not done[value] then
-			done[value] = true
-			printh(spaces..key..":")
-			dump(value, indent + 2, done)						done[value] = nil
-		else
-			printh(spaces..key..": "..value)
-		end
-	end
+function get_table_keys(table)
+  local keyset = {}
+  for k,v in pairs(table) do
+    keyset[#keyset + 1] = k
+  end
+  return keyset
 end
+
 -->8
--- game
-
-function init_game()
-	init_areas()
-end
-
-function update_game()
-	update_target()
-	-- action selection
-	if state==states.in_game_action_selection then
-		update_game_action_selection()
-	end
-	-- move
-	if state==states.in_game_move then
-		update_game_move()
-	end
-	-- enter building
-	if state==states.in_game_enter_building then
-		update_game_enter_building()
-	end
-end
-
-function draw_game()
-	draw_map()
-	draw_players()
-	
-	if state==states.in_game_action_selection then
-		draw_game_action_selection()
-	end
-	
-	if state==states.in_game_enter_building then
-		draw_game_enter_building()
-	end
-	
-	draw_ui()
-end
+-- map and buildings
 
 function draw_map()
 	cls()
@@ -228,102 +344,7 @@ function draw_map()
 	
 end
 
---[[===========================
-	
-	in_game_action_selection
-	
-=============================]]
-
-function update_game_action_selection()
-	-- handle actions
-	if (btnp(⬅️)) current_player-=1
-	if (btnp(➡️)) current_player+=1	
-	if (btnp(⬇️)) move_to_next_action(1)
-	if (btnp(⬆️)) move_to_next_action(-1)
-	if (btnp(🅾️)) do_action()
-	-- check if current player is out of boundaries
-	if (current_player>#players) current_player=1
-	if (current_player<1) current_player=#players
-end
-
-function move_to_next_action(direction)
-	local keys=get_table_keys(actions)
-	local index=nil
-	for i,v in ipairs(actions) do
-		if v.name==current_action.name then
-			index=i
-		end
-	end
-	-- go to next index
-	index+=direction
-	-- check new index is in boundaries
-	if (index>#actions) index=1
-	if (index<1) index=#actions
-	-- modify current action
-	current_action=actions[keys[index]]
-end
-
-function draw_game_action_selection()
-	local p=players[current_player]
-	if current_action.name=="special" then
-		local p=players[current_player]
-		name=p.job.action.name
-		description=p.job.action.description
-	else
-		name=current_action.name
-		description=current_action.description
-	end
-	
-	rectfill(22,93,20+#name*4+4,91+8,1)
-	rectfill(20,91,20+#name*4+2,91+6,2)
-	
-	rectfill(22,102,117,122,1)
-	if p.actions>0 then
-		rectfill(20,100,115,120,2)
-	else
-		rectfill(20,100,115,120,8)
-	end
-	
-	print(name,22,92,7)
-	if p.actions>0 then
-		print(description,22,102,7)
-	else
-		print("no actions remaining",22,102,7)
-	end
-end
-
---[[===========================
-	
-	in_game_move
-	
-=============================]]
-
-function update_game_move()
-	local p=players[current_player]
-	local newx,newy=p.x,p.y
-
-	if (p.actions==0) then
-		state=states.in_game_action_selection
-		return
-	end
-
-	if (btnp(⬅️)) newx-=1
-	if (btnp(➡️)) newx+=1
-	if (btnp(⬇️)) newy+=1
-	if (btnp(⬆️)) newy-=1
-	
-	if (btnp(❎)) state=states.in_game_action_selection
-	
-	if ((p.x~=newx or p.y~=newy) and can_go_to(newx,newy)) then
-		p.x=newx
-		p.y=newy
-		if (not freemove) p.actions-=1
-	end
-	
-	get_building_for_player()
-end
-
-function can_go_to(x,y)
+function current_player_can_go_to(x,y)
 	-- check out of boundaries
 	if x<1 or x>15 or y<1 or y>15 then
 		return false
@@ -336,65 +357,54 @@ function can_go_to(x,y)
 	-- all is right
 	return true
 end
-function do_action()
-	if (current_action.name=="move") state=states.in_game_move
-end
 
---[[===========================
-
-	in_game_enter_building
-
-=============================]]
-
-function update_game_enter_building()
-	if btnp(❎) 
-		or btnp(🅾️)
-		--or btnp(⬅️)
-		--or btnp(➡️)
-		--or btnp(⬇️)
-		--or btnp(⬆️)
-		then
-		state=states.in_game_move
-	end
-end
-
-function draw_game_enter_building()
-	local p=players[current_player]
-	local place=p.building.name
-	rectfill(17,66,122,74,1)
-	rectfill(15,64,120,72,2)
-	print(
-		place,
-		(122-17-#place*4)/2+17+1,
-		67,
-		1
-	)
-	print(
-		place,
-		(122-17-#place*4)/2+17,
-		66,
-		7
-	)
-end
 -->8
 -- players
 
-function init_players()
-	for i=1,4 do
-		local x,y = rnd_start_location()
-		local job = get_a_job()
-		add(players, {
-			hp=6,
-			actions=4,
-			x=x,		-- pos x on the grid
-			y=y,		-- pos y on the grid
-			ox=x, -- offset (for animation)
-			oy=y,	-- offset (for animation)
-			job=job,
-			mirror=false, -- if true, look to the left
-			building=nil, -- building data
-		})
+function get_building_for_player()
+	local p=players[current_player]
+	local a=nil
+	local relx=0 local rely=0
+	local previous_building_id=nil
+	if p.building~=nil then
+		previous_building_id=p.building.id
 	end
+	-- determine which area we are in
+	-- and calculate the player position relative to the area
+	if p.x>1 and p.x<8 and p.y>1 and p.y<8 then
+		a=areas[1]
+		relx=p.x-1 rely=p.y-1
+	elseif p.x>8 and p.x<15 and p.y>1 and p.y<8 then
+		a=areas[2]
+		relx=p.x-8 rely=p.y-1
+	elseif p.x>1 and p.x<8 and p.y>8 and p.y<15 then	
+		a=areas[3]
+		relx=p.x-1 rely=p.y-8
+	elseif p.x>8 and p.x<15 and p.y>8 and p.y<15 then
+		a=areas[4]
+		relx=p.x-8 rely=p.y-8
+	else
+		p.building=nil
+		return
+	end
+	-- check the building in the area
+	for b in all(a.buildings) do
+		for r in all(b.rects) do
+			if relx>=r[1] and relx<=r[3]
+				and rely>=r[2] and rely<=r[4] then
+				p.building=b
+				if previous_building_id~=b.id then
+					building_message = {
+						name=p.building.name,
+						anim=3
+					}
+				end
+				return b
+			end
+		end
+	end
+	p.building=nil
+	return nil
 end
 
 function draw_players()
@@ -469,8 +479,7 @@ function rnd_start_location()
 	until not exists
 	return col, row	
 end
--->8
--- zombies
+
 -->8
 -- ui
 function draw_ui()
@@ -552,7 +561,7 @@ function draw_target(x,y)
 	end
 end
 -->8
--- data
+-- game data
 
 -- objects
 objects = {
@@ -749,15 +758,6 @@ layouts = {
 	},
 }
 
--- game states
-states = {
-	title_screen=0,
-	in_game=1,
-	in_game_action_selection=2,
-	in_game_move=3,
-	in_game_enter_building=4,
-}
-
 -- players jobs
 jobs = {
 	builder={
@@ -851,94 +851,6 @@ actions = {
 		description="end the current turn",
 	},
 }
--->8
--- area and building
-
-function init_areas()
-	-- pick areas to add to the map
-	repeat
-		local area=layouts[ceil(rnd(#layouts))]
-		-- todo check area not already used before adding it
-		local exists=false
-		for a in all(areas) do
-			if (a==area) exists=true
-		end
-		if not exists then
-			init_buildings(area)
-			add(areas,area)
-		end
-	until #areas==4
-end
-
-function init_buildings(area)
-	for b in all(area.buildings) do
-		local building=nil
-		if b.is=="normal" then
-			building=normal_building
-		elseif b.is=="graveyard" then
-			building=graveyard
-		else
-			-- special buildings are picked randomly
-			repeat
-				local exists=false
-				local spe=special_buildings[ceil(rnd(#special_buildings))]
-				for special_building in all(game_special_buildings) do
-					if special_building.name==b.name then
-						exists=true
-					end
-				end
-				building=spe
-			until not exists
-		end
-		b.name=building.name
-		-- todo copy objects
-	end
-end
-
--- get the building at player position or nil
-function get_building_for_player()
-	local p=players[current_player]
-	local a=nil
-	local relx=0 local rely=0
-	local previous_building_id=nil
-	--printh(p.building)
-	if p.building~=nil then
-		previous_building_id=p.building.id
-	end
-	-- determine which area we are in
-	-- and calculate the player position relative to the area
-	if p.x>1 and p.x<8 and p.y>1 and p.y<8 then
-		a=areas[1]
-		relx=p.x-1 rely=p.y-1
-	elseif p.x>8 and p.x<15 and p.y>1 and p.y<8 then
-		a=areas[2]
-		relx=p.x-8 rely=p.y-1
-	elseif p.x>1 and p.x<8 and p.y>8 and p.y<15 then	
-		a=areas[3]
-		relx=p.x-1 rely=p.y-8
-	elseif p.x>8 and p.x<15 and p.y>8 and p.y<15 then
-		a=areas[4]
-		relx=p.x-8 rely=p.y-8
-	else
-		p.building=nil
-		return
-	end
-	-- check the building in the area
-	for b in all(a.buildings) do
-		for r in all(b.rects) do
-			if relx>=r[1] and relx<=r[3]
-				and rely>=r[2] and rely<=r[4] then
-				p.building=b
-				if previous_building_id~=b.id then
-					state=states.in_game_enter_building
-				end
-				return b
-			end
-		end
-	end
-	p.building=nil
-	return nil
-end
 
 __gfx__
 00000000eeaaa1eeeeaaa1eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000000555555555555555555555555
