@@ -76,7 +76,13 @@ function init_game()
 
 	areas={}
 	game_special_buildings={}
-	building_message = {
+	
+	info_message = {
+		message=nil,
+		anim=0
+	}
+
+	error_message = {
 		message=nil,
 		anim=0
 	}
@@ -122,7 +128,7 @@ function init_game()
 					until not exists
 				end
 				b.name=building.name
-				-- @todo copy objects
+				b.objects=building.objects
 			end
 			-- add the area to the map areas
 			add(areas,area)
@@ -141,8 +147,11 @@ function init_game()
 			ox=x, -- offset (for animation)
 			oy=y,	-- offset (for animation)
 			job=job,
+			anim=0,
 			mirror=false, -- if true, look to the left
 			building=nil, -- building data
+			inventory={},
+			max_inventory_size=6,
 		})
 	end
 
@@ -153,12 +162,16 @@ end
 function update_game()
 	-- update animations
 	update_target()
-	-- update building message timer
-	if building_message.name~=nil then
-		building_message.anim-=0.1
-		if building_message.anim <= 0 then building_message.name=nil end
+	update_player()
+	-- update messages
+	if info_message.message~=nil then
+		info_message.anim-=0.1
+		if info_message.anim <= 0 then info_message.message=nil end
 	end
-	
+	if error_message.message~=nil then
+		error_message.anim-=0.1
+		if error_message.anim <= 0 then error_message.message=nil end
+	end
 	-- handle user interaction
 	if game_state=="action_selection" then
 		if (btnp(⬅️)) current_player-=1
@@ -201,6 +214,10 @@ function update_game()
 		-- retrieve the builder the player is in (if any)
 		get_building_for_player()
 	end
+	
+	if game_state=="inventory" then
+		-- @todo
+	end
 
 	if game_state=="enter_building" then update_game_enter_building() end
 end
@@ -225,7 +242,39 @@ end
 
 -- execute the selected action for the current player
 function do_action()
+	local p=players[current_player]
+	-- switch to move state
 	if (current_action.name=="move") game_state="move"
+	-- pickup an object from the current building
+	if current_action.name=="search" then
+		if p.building==nil then
+			printh("not building")
+			error_message={
+				message="you are not in a building",
+				anim=4
+			}
+			return
+		end
+		if #p.inventory>=p.max_inventory_size then
+			printh("full")
+			error_message={
+				message="your inventory is full",
+				anim=4
+			}
+			return
+		end
+		local o=p.building.objects[ceil(rnd(#p.building.objects))]
+		info_message={
+			message="you found "..o.name,
+			anim=4
+		}
+		add(p.inventory,o)
+		-- Run the action if it has one
+		--if o.action~=nil then o.actions() end
+	end
+	if current_action.name=="inventory" then
+		-- @todo
+	end
 end
 
 function draw_game()
@@ -260,9 +309,13 @@ function draw_game()
 			print("no actions remaining",22,102,7)
 		end
 	end
+	
+	if game_state=="inventory" then
+		-- @todo
+	end
 
-	if building_message.name~=nil then
-		local place=building_message.name
+	if info_message.message~=nil then
+		local place=info_message.message
 		rectfill(17,66,122,74,1)
 		rectfill(15,64,120,72,2)
 		print(
@@ -274,6 +327,24 @@ function draw_game()
 		print(
 			place,
 			(122-17-#place*4)/2+17,
+			66,
+			7
+		)
+	end
+
+	if error_message.message~=nil then
+		local message=error_message.message
+		rectfill(17,66,122,74,1)
+		rectfill(15,64,120,72,8)
+		print(
+			message,
+			(122-17-#message*4)/2+17+1,
+			67,
+			1
+		)
+		print(
+			message,
+			(122-17-#message*4)/2+17,
 			66,
 			7
 		)
@@ -394,17 +465,21 @@ function get_building_for_player()
 				and rely>=r[2] and rely<=r[4] then
 				p.building=b
 				if previous_building_id~=b.id then
-					building_message = {
-						name=p.building.name,
+					info_message = {
+						message=p.building.name,
 						anim=3
 					}
 				end
-				return b
+				return
 			end
 		end
 	end
-	p.building=nil
-	return nil
+end
+
+function update_player()
+	local p=players[current_player]
+	p.anim+=0.1
+	if p.anim>2 then p.anim=0 end
 end
 
 function draw_players()
@@ -413,20 +488,37 @@ function draw_players()
 	end
 end
 
-function draw_player(p,x,y)
+function draw_player(p,x,y,menu)
 	local x=x or p.x*8
 	local y=y or p.y*8
-	if players[current_player]==p then
+	local menu=menu or false
+	local sprite=nil
+	
+	if players[current_player]==p and menu==false then
 		draw_target(x,y)
 	end
+	
 	palt(0,false)
 	palt(14,true)
-	if fget(mget(p.x-1,p.y-1),1) then
+	
+	if fget(mget(p.x-1,p.y-1),1) and menu==false then
 		-- when in building, player is shadowed
-		spr(28,x,y,1,1,p.mirror)
+		sprite=27
 	else
-		spr(p.job.sprite,x,y,1,1,p.mirror)
+		sprite=p.job.sprite
 	end
+	
+	if menu==false then
+		-- @todo check if walking
+		sprite+=p.anim
+	end
+	
+	if menu then
+			spr(sprite,x,y)
+		else
+			spr(sprite,x,y,1,1,p.mirror)
+		end
+	
 	palt(0,true)
 	palt(14,false)
 end
@@ -491,7 +583,7 @@ end
 function draw_player_status()
 	local p=players[current_player]
 	rectfill(0,0,127,7,2)
-	draw_player(p,0,0)
+	draw_player(p,0,0,true)
 	for i=1,p.hp do
 		spr(11,1+i*8,0)
 	end
@@ -519,16 +611,20 @@ function draw_actions()
 		rectfill(0,20,7,28,14)
 	end
 
-	if current_action.name=="fight" then
+	if current_action.name=="inventory" then
 		rectfill(0,30,7,38,14)
+	end
+
+	if current_action.name=="fight" then
+		rectfill(0,40,7,48,14)
 	end
 	
 	if current_action.name=="exchange" then
-		rectfill(0,40,7,48,14)
+		rectfill(0,50,7,58,14)
 	end
 
 	if current_action.name=="special" then
-		rectfill(0,50,7,58,14)
+		rectfill(0,60,7,68,14)
 	end
 		
 	if current_action.name=="turn end" then
@@ -537,9 +633,10 @@ function draw_actions()
 	
 	spr(48,0,10) -- move
 	spr(50,0,20) -- search
-	spr(51,0,30) -- fight
-	spr(49,0,40) -- exchange
-	spr(p.job.action.sprite,0,50) -- player special action
+	spr(43,0,30) -- inventory
+	spr(51,0,40) -- fight
+	spr(49,0,50) -- exchange
+	spr(p.job.action.sprite,0,60) -- player special action
 	
 	spr(59,0,120) -- turn end
 end
@@ -619,6 +716,81 @@ objects = {
 		name="antibiotics",
 		description="",
 	},
+	-- police station
+	cell_door={
+		name="cell door",
+		description="",
+	},
+	gun={
+		name="a gun with 3 ammo",
+		description="",
+	},
+	stale_donuts={
+		name="stale donuts",
+		description="The appearance is suspicious, but you are so hungry...",
+	},
+	cocain_bag={
+		name="cocain bag",
+		description="",
+	},
+	bulletproof_vest={
+		name="bulletproof vest",
+		description="",
+	},
+	cb_radio={
+		name="cb-radio",
+		description="",
+	},
+	-- graveyard
+	embittered_deceased={
+		name="embittered deceased",
+		description="not so dead after all…",
+	},
+	gravedigger_shovel={
+		name="gravedigger shovel",
+		description="",
+	},
+	flower_wreath={
+		name="flower wreath",
+		description="we will all go to heaven... but in fact no",
+	},
+	matches={
+		name="matches",
+		description="",
+	},
+	old_military_helmet={
+		name="old military helmet",
+		description="",
+	},
+	bag_of_nails={
+		name="bag of nails",
+		description="",
+	},
+	-- garage
+	dangerous_material={
+		name="dangerous material",
+		description="",
+	},
+	rifle={
+		name="rifle with 6 ammo",
+		description="",
+	},
+	pinup_calendar={
+		name="pinup calendar",
+		description="miss december has definitely changed a lot since",
+	},
+	energy_drink={
+		name="energy drink",
+		description="",
+	},
+	tool_bag={
+		name="tool bag",
+		description="tool bag",
+	},
+	gasoline={
+		name="gasoline",
+		description=""
+	}
 }
 
 -- buildings
@@ -640,13 +812,18 @@ normal_building = {
 -- and cannot be selected randomly
 graveyard = {
 	name="graveyard",
+	objects={
+		objects.embittered_deceased,
+		objects.gravedigger_shovel,
+		objects.flower_wreath,
+		objects.matches,
+		objects.old_military_helmet,
+		objects.bag_of_nails,
+	}
 }
 
 -- those buildings can be picked randomly
 special_buildings = {
-	{
-		name="hospital",
-	},
 	{
 		name="sanitarium",
 		objects={
@@ -660,9 +837,25 @@ special_buildings = {
 	},
 	{
 		name="police station",
+		objects={
+			objects.cell_door,
+			objects.gun,
+			objects.stale_donuts,
+			objects.cocain_bag,
+			objects.bulletproof_vest,
+			objects.cb_radio,
+		}
 	},
 	{
 		name="garage",
+		objects={
+			objects.dangerous_material,
+			objects.rifle,
+			objects.pinup_calendar,
+			objects.energy_drink,
+			objects.tool_bag,
+			objects.gasoline,
+		}
 	}
 }
 
@@ -835,6 +1028,10 @@ actions = {
 		description="search for items in a\nbuilding",
 	},
 	{
+		name="inventory",
+		description="watch your inventory",
+	},
+	{
 		name="fight",
 		description="fight zombies",
 	},
@@ -861,28 +1058,28 @@ __gfx__
 00700700eccccc1eeeccc1eee000001eee0001eeef777f1eee7771eeefaaaf1eeeaaa1eeef009f1eee0091ee0788870079797000555555555555555555566555
 00000000eeccc1eeeeccc1eeee0001eeee0001eeee6661eeee6661eeeeccc1eeeeccc1eeeeddd1eeeeddd1ee0078700079797000555555555555555555566555
 00000000eec1c1eeeeec1eeeee0101eeeee01eeeee6161eeeee61eeeeec1c1eeeeec1eeeeed1d1eeeeed1eee0007000077077000555555555555555555555555
-88800888ee33331eee33331eeeeeeeeeeeeeeeee00000000000000000000000000000000000000000000000000000000eeeeeeee555555555555555555555555
-80000008e3c7cc31e3c7cc31eeffff1eeeffff1e00000000000000000000000000000000000000000000000000000000eeddddee555555555555555555555555
-80000008e371c131e371c131eef1f11eeef1f11e00000000000000000000000000000000000000000000000000000000eeddddee555555555555555555555555
-00000000e3ccc731e3ccc731eeffff1eeeffff1e00000000000000000000000000000000000000000000000000000000eeddddee555666655666666556666555
-00000000ee3331eeee3331eeee0071eeee0071ee00000000000000000000000000000000000000000000000000000000eedddeee555666655666666556666555
-80000008e333331eee3331eeef000f1eee0001ee00000000000000000000000000000000000000000000000000000000edddddee555665555556655555566555
-80000008ee3331eeee3331eeee0001eeee0001ee00000000000000000000000000000000000000000000000000000000eedddeee555665555556655555566555
-88800888ee3131eeeee311eeee0101eeeee01eee00000000000000000000000000000000000000000000000000000000eededeee555555555555555555555555
+88800888ee33331eee33331eeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000eeeeeeeeeeeeeeee555555555555555555555555
+80000008e3c7cc31e3c7cc31eeffff1eeeffff1e000000000000000000000000000000000000000000000000eedddd1eeedddd1e555555555555555555555555
+80000008e371c131e371c131eef1f11eeef1f11e000000000000000000000000000000000000000000000000eedddd1eeedddd1e555555555555555555555555
+00000000e3ccc731e3ccc731eeffff1eeeffff1e000000000000000000000000000000000000000000000000eedddd1eeedddd1e555666655666666556666555
+00000000ee3331eeee3331eeee0071eeee0071ee000000000000000000000000000000000000000000000000eeddd1eeeeddd1ee555666655666666556666555
+80000008e333331eee3331eeef000f1eee0001ee000000000000000000000000000000000000000000000000eddddd1eeeddd1ee555665555556655555566555
+80000008ee3331eeee3331eeee0001eeee0001ee000000000000000000000000000000000000000000000000eeddd1eeeeddd1ee555665555556655555566555
+88800888ee3131eeeee311eeee0101eeeee01eee000000000000000000000000000000000000000000000000eed1d1eeeee1d1ee555555555555555555555555
 88000088eeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000000000000000000000000eeeeeeee555555555555555555555555
-80000008ee33331eee33331e000000000000000000000000000000000000000000000000000000000000000000000000eeeeeeee555665555556655555566555
+80000008ee33331eee33331e000000000000000000000000000000000000000000000000000000000000000000077000eeeeeeee555665555556655555566555
 00000000ee3a3a1eee3a3a1e00000000000000000000000000000000000000000000000000000000000000000000000099599599555665555556655555566555
-00000000ee33331eee33331e00000000000000000000000000000000000000000000000000000000000000000000000095995995555666655666666556666555
-00000000ee3831eeee3831ee00000000000000000000000000000000000000000000000000000000000000000000000059959959555666655666666556666555
-00000000e333331eee3331ee00000000000000000000000000000000000000000000000000000000000000000000000019111191555665555556655555566555
-80000008ee3381eeee3381ee000000000000000000000000000000000000000000000000000000000000000000000000e9eeee9e555665555556655555566555
+00000000ee33331eee33331e00000000000000000000000000000000000000000000000000000000000000000007700095995995555666655666666556666555
+00000000ee3831eeee3831ee00000000000000000000000000000000000000000000000000000000000000000007700059959959555666655666666556666555
+00000000e333331eee3331ee00000000000000000000000000000000000000000000000000000000000000000007700019111191555665555556655555566555
+80000008ee3381eeee3381ee000000000000000000000000000000000000000000000000000000000000000000077070e9eeee9e555665555556655555566555
 88000088ee3131eeeee31eee000000000000000000000000000000000000000000000000000000000000000000000000919ee919555555555555555555555555
 000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eeeeeeee555555555555555555555555
 000070000070000000770000007777000777777000000070000000000777777000700700000770000077770007770000eeeeeeea555665555556655555566555
 000077000777777007007000007000000770077000777500070770700777777000700700007777000000700000700770eeeeee41555665555556655555566555
 077777700070000007007000007000000700007007007700007707700705705000700700007777000007700000700700eee0041e555666655666666556666555
 077777700000070000775000007700000700007007777700077077700777777000777700000770000077770000700770ee06001e555666655666666556666555
-000077000777777000000700007000000770077007777700007007000777777000700700000770000777777000000700ee00001e555555555555555555555555
+000077000777777000000700007000000770077007777700007007000777777000700700000770000777777000700700ee00001e555555555555555555555555
 000070000000070000000070007007000777777000777000007007000070070000700700000770000777777000000770ee1001ee555555555555555555555555
 000000000000000000000000000000000000000000000000000000000007700000000000000000000000000000000000eee11eee555555555555555555555555
 00000000000000000000000000000000440000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000
