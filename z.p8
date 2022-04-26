@@ -97,6 +97,7 @@ function init_game()
 	}
 	
 	current_action=actions[1]
+	current_inventory_selection=nil
 
 	-- init areas
 	repeat
@@ -160,6 +161,7 @@ function init_game()
 end
 
 function update_game()
+	local p=players[current_player]
 	-- update animations
 	update_target()
 	update_player()
@@ -185,7 +187,6 @@ function update_game()
 	end
 
 	if game_state=="move" then
-		local p=players[current_player]
 		local newx,newy=p.x,p.y
 
 		if btnp(❎) or p.actions==0 then
@@ -216,7 +217,22 @@ function update_game()
 	end
 	
 	if game_state=="inventory" then
-		-- @todo
+		if #p.inventory>0 then
+			if (btnp(⬅️)) current_inventory_selection-=1
+			if (btnp(➡️)) current_inventory_selection+=1
+
+			if current_inventory_selection > #p.inventory then
+				current_inventory_selection=1
+			end
+			if current_inventory_selection < 1 then
+				current_inventory_selection=#p.inventory
+			end
+		end
+
+		if btnp(❎) then
+			current_inventory_selection=1
+			game_state="action_selection"
+		end
 	end
 
 	if game_state=="enter_building" then update_game_enter_building() end
@@ -248,7 +264,6 @@ function do_action()
 	-- pickup an object from the current building
 	if current_action.name=="search" then
 		if p.building==nil then
-			printh("not building")
 			error_message={
 				message="you are not in a building",
 				anim=4
@@ -256,7 +271,6 @@ function do_action()
 			return
 		end
 		if #p.inventory>=p.max_inventory_size then
-			printh("full")
 			error_message={
 				message="your inventory is full",
 				anim=4
@@ -273,18 +287,19 @@ function do_action()
 		--if o.action~=nil then o.actions() end
 	end
 	if current_action.name=="inventory" then
-		-- @todo
+		current_inventory_selection=1
+		game_state="inventory"
 	end
 end
 
 function draw_game()
+	local p=players[current_player]
+
 	draw_map()
 	draw_players()
 	
 	if game_state=="action_selection" then
-		local p=players[current_player]
 		if current_action.name=="special" then
-			local p=players[current_player]
 			name=p.job.action.name
 			description=p.job.action.description
 		else
@@ -311,7 +326,44 @@ function draw_game()
 	end
 	
 	if game_state=="inventory" then
-		-- @todo
+		rectfill(17,17,122,122,1)
+		rectfill(15,15,120,120,2)
+		rectfill(15,15,120,21,1)
+		
+		print(
+			"inventory ("..#p.inventory.."/"..p.max_inventory_size..")",
+			38,16,7
+		)
+		
+		for i=1,p.max_inventory_size do
+			local x=19+(i-1)*11
+			local y=27
+			if i==current_inventory_selection and p.inventory[i]~=nil then
+				rect(x,y,x+9,y+9,7)
+			else
+				rect(x,y,x+9,y+9,13)
+			end
+			if p.inventory[i]~=nil then
+				spr(
+					p.inventory[i].sprite,
+					x+1,y+1
+				)
+			end
+		end
+
+		local o=p.inventory[current_inventory_selection]
+
+		if o~=nil then
+			print(o.name,21,46,0)
+			print(o.name,20,45,7)
+			print(o.description,21,56,0)
+			print(o.description,20,55,7)
+		end
+		
+		print(
+			"❎ to close the inventory\n🅾️ for available actions",
+			17,108,7
+		)
 	end
 
 	if info_message.message~=nil then
@@ -429,7 +481,7 @@ function current_player_can_go_to(x,y)
 	return true
 end
 
--->8
+-->8❎
 -- players
 
 function get_building_for_player()
@@ -672,22 +724,27 @@ objects = {
 		end
 	},
 	kitchen_knife={
+		sprite=64,
 		name="kitchen knife",
 		description="a kitchen knife",
 	},
 	bandage={
+		sprite=96,
 		name="bandage",
 		description="recover 1♥",
 	},
 	survival_book={
+		sprite=81,
 		name="survival book",
 		description="add 1 max ♥",
 	},
-	toothpast={
+	toothpaste={
+		sprite=0,
 		name="toothpaste",
 		description="your breath left a little to be\ndesired lately.",
 	},
 	brick={
+		sprite=65,
 		name="brick",
 		description="a red brick to do something with",
 	},
@@ -697,97 +754,120 @@ objects = {
 		description="he looks pretty dead",
 	},
 	oxygen_bomb={
+		sprite=66,
 		name="oxygen bomb",
 		description="make it explodes baby",
 	},
 	straitjacket={
+		sprite=0,
 		name="straitjacket",
 		description="this is precisely your size,\ncoincidence?"
 	},
 	care_kit={
+		sprite=97,
 		name="care kit",
 		description="recover 2♥",
 	},
 	stethoscope={
+		sprite=80,
 		name="stethoscope",
 		description="???",
 	},
 	antibiotics={
+		sprite=112,
 		name="antibiotics",
 		description="",
 	},
 	-- police station
 	cell_door={
+		sprite=0,
 		name="cell door",
 		description="",
 	},
 	gun={
+		sprite=67,
 		name="a gun with 3 ammo",
 		description="",
 	},
 	stale_donuts={
+		sprite=0,
 		name="stale donuts",
 		description="The appearance is suspicious, but you are so hungry...",
 	},
 	cocain_bag={
+		sprite=98,
 		name="cocain bag",
 		description="",
 	},
 	bulletproof_vest={
+		sprite=82,
 		name="bulletproof vest",
 		description="",
 	},
 	cb_radio={
+		sprite=113,
 		name="cb-radio",
 		description="",
 	},
 	-- graveyard
 	embittered_deceased={
+		sprite=0,
 		name="embittered deceased",
 		description="not so dead after all…",
 	},
 	gravedigger_shovel={
+		sprite=68,
 		name="gravedigger shovel",
 		description="",
 	},
 	flower_wreath={
+		sprite=0,
 		name="flower wreath",
 		description="we will all go to heaven... but in fact no",
 	},
 	matches={
+		sprite=100,
 		name="matches",
 		description="",
 	},
 	old_military_helmet={
+		sprite=83,
 		name="old military helmet",
 		description="",
 	},
 	bag_of_nails={
+		sprite=114,
 		name="bag of nails",
 		description="",
 	},
 	-- garage
 	dangerous_material={
+		sprite=0,
 		name="dangerous material",
 		description="",
 	},
 	rifle={
+		sprite=69,
 		name="rifle with 6 ammo",
 		description="",
 	},
 	pinup_calendar={
+		sprite=0,
 		name="pinup calendar",
 		description="miss december has definitely changed a lot since",
 	},
 	energy_drink={
+		sprite=0,
 		name="energy drink",
 		description="",
 	},
 	tool_bag={
+		sprite=84,
 		name="tool bag",
 		description="tool bag",
 	},
 	gasoline={
+		sprite=115,
 		name="gasoline",
 		description=""
 	}
