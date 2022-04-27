@@ -98,6 +98,8 @@ function init_game()
 	
 	current_action=actions[1]
 	current_inventory_selection=nil
+	inventory_actions={"use","throw"}
+	current_inventory_action=1
 
 	-- init areas
 	repeat
@@ -220,12 +222,21 @@ function update_game()
 		if #p.inventory>0 then
 			if (btnp(⬅️)) current_inventory_selection-=1
 			if (btnp(➡️)) current_inventory_selection+=1
+			if (btnp(⬇️)) current_inventory_action+=1
+			if (btnp(⬆️)) current_inventory_action-=1
 
 			if current_inventory_selection > #p.inventory then
 				current_inventory_selection=1
 			end
 			if current_inventory_selection < 1 then
 				current_inventory_selection=#p.inventory
+			end
+
+			if current_inventory_action > #inventory_actions then
+				current_inventory_action=1
+			end
+			if current_inventory_action < 1 then
+				current_inventory_action=#current_inventory_action
 			end
 		end
 
@@ -282,9 +293,12 @@ function do_action()
 			message="you found "..o.name,
 			anim=4
 		}
-		add(p.inventory,o)
 		-- Run the action if it has one
-		--if o.action~=nil then o.actions() end
+		if o.action~=nil then o.action() end
+		-- Add the object to the inventory if set
+		if o.autoremove==nil or o.autoremove==false then
+			add(p.inventory,o)
+		end
 	end
 	if current_action.name=="inventory" then
 		current_inventory_selection=1
@@ -354,16 +368,37 @@ function draw_game()
 		local o=p.inventory[current_inventory_selection]
 
 		if o~=nil then
+
 			print(o.name,21,46,0)
 			print(o.name,20,45,7)
-			print(o.description,21,56,0)
-			print(o.description,20,55,7)
+
+			print(o.description,21,61,0)
+			print(o.description,20,60,7)
+
+			local box_x=82
+			local box_y=95
+			local box_w=35
+			local box_h=22
+
+			line(box_x+1,box_y,box_x+box_w-1,box_y,1)
+			line(box_x+1,box_y+box_h,box_x+box_w-1,box_y+box_h,1)
+			line(box_x,box_y+1,box_x,box_y+box_h-1,1)
+			line(box_x+box_w,box_y+1,box_x+box_w,box_y+box_h-1,1)
+
+			print("use",box_x+6,box_y+6,0)
+			if inventory_actions[current_inventory_action]=="use" then
+				print("use",box_x+5,box_y+5,7)
+			else
+				print("use",box_x+5,box_y+5,6)
+			end
+			print("throw",box_x+6,box_y+6+8,0)
+			if inventory_actions[current_inventory_action]=="throw" then
+				print("throw",box_x+5,box_y+5+8,7)
+			else
+				print("throw",box_x+5,box_y+5+8,6)
+			end
+
 		end
-		
-		print(
-			"❎ to close the inventory\n🅾️ for available actions",
-			17,108,7
-		)
 	end
 
 	if info_message.message~=nil then
@@ -713,25 +748,31 @@ end
 -- game data
 
 -- objects
+-- nb: descriptions must no be more than 24 caraters per line
 objects = {
 	-- simple building
 	trap={
 		name="trap",
-		description="you lose 1♥",
+		description="it’s a trap! you lose 1♥",
 		action=function()
 			local p=players[current_player]
 			p.hp-=1
-		end
+		end,
+		autoremove=true,
 	},
 	kitchen_knife={
 		sprite=64,
 		name="kitchen knife",
-		description="a kitchen knife",
+		description="+1 damage in melee",
 	},
 	bandage={
 		sprite=96,
 		name="bandage",
 		description="recover 1♥",
+		use=function()
+			local p=players[current_player]
+			p.hp+=1
+		end
 	},
 	survival_book={
 		sprite=81,
@@ -741,12 +782,12 @@ objects = {
 	toothpaste={
 		sprite=0,
 		name="toothpaste",
-		description="your breath left a little to be\ndesired lately.",
+		description="your breath left a\nlittle to be desired\nlately.",
 	},
 	brick={
 		sprite=65,
 		name="brick",
-		description="a red brick to do something with",
+		description="+1 damage in ranged",
 	},
 	-- sanitarium
 	hungry_patient={
@@ -761,7 +802,7 @@ objects = {
 	straitjacket={
 		sprite=0,
 		name="straitjacket",
-		description="this is precisely your size,\ncoincidence?"
+		description="this is precisely your\nsize, coincidence?"
 	},
 	care_kit={
 		sprite=97,
@@ -776,38 +817,38 @@ objects = {
 	antibiotics={
 		sprite=112,
 		name="antibiotics",
-		description="",
+		description="???",
 	},
 	-- police station
 	cell_door={
 		sprite=0,
 		name="cell door",
-		description="",
+		description="???",
 	},
 	gun={
 		sprite=67,
 		name="a gun with 3 ammo",
-		description="",
+		description="???",
 	},
 	stale_donuts={
 		sprite=0,
 		name="stale donuts",
-		description="The appearance is suspicious, but you are so hungry...",
+		description="the appearance is\nsuspicious, but you are\nso hungry...",
 	},
 	cocain_bag={
 		sprite=98,
 		name="cocain bag",
-		description="",
+		description="???",
 	},
 	bulletproof_vest={
 		sprite=82,
 		name="bulletproof vest",
-		description="",
+		description="???",
 	},
 	cb_radio={
 		sprite=113,
 		name="cb-radio",
-		description="",
+		description="???",
 	},
 	-- graveyard
 	embittered_deceased={
@@ -818,58 +859,58 @@ objects = {
 	gravedigger_shovel={
 		sprite=68,
 		name="gravedigger shovel",
-		description="",
+		description="???",
 	},
 	flower_wreath={
 		sprite=0,
 		name="flower wreath",
-		description="we will all go to heaven... but in fact no",
+		description="we will all go to\nheaven...\nbut in fact no",
 	},
 	matches={
 		sprite=100,
 		name="matches",
-		description="",
+		description="???",
 	},
 	old_military_helmet={
 		sprite=83,
 		name="old military helmet",
-		description="",
+		description="???",
 	},
 	bag_of_nails={
 		sprite=114,
 		name="bag of nails",
-		description="",
+		description="???",
 	},
 	-- garage
 	dangerous_material={
 		sprite=0,
 		name="dangerous material",
-		description="",
+		description="???",
 	},
 	rifle={
 		sprite=69,
 		name="rifle with 6 ammo",
-		description="",
+		description="???",
 	},
 	pinup_calendar={
 		sprite=0,
 		name="pinup calendar",
-		description="miss december has definitely changed a lot since",
+		description="miss december has\ndefinitely changed a\nlot since",
 	},
 	energy_drink={
 		sprite=0,
 		name="energy drink",
-		description="",
+		description="???",
 	},
 	tool_bag={
 		sprite=84,
 		name="tool bag",
-		description="tool bag",
+		description="???",
 	},
 	gasoline={
 		sprite=115,
 		name="gasoline",
-		description=""
+		description="???"
 	}
 }
 
