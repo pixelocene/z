@@ -98,7 +98,7 @@ function init_game()
 	
 	current_action=actions[1]
 	current_inventory_selection=nil
-	inventory_actions={"use","throw"}
+	inventory_actions={}
 	current_inventory_action=1
 
 	-- init areas
@@ -220,23 +220,46 @@ function update_game()
 	
 	if game_state=="inventory" then
 		if #p.inventory>0 then
-			if (btnp(⬅️)) current_inventory_selection-=1
-			if (btnp(➡️)) current_inventory_selection+=1
-			if (btnp(⬇️)) current_inventory_action+=1
-			if (btnp(⬆️)) current_inventory_action-=1
+			if btnp(⬅️) or btnp(➡️) then
 
-			if current_inventory_selection > #p.inventory then
-				current_inventory_selection=1
-			end
-			if current_inventory_selection < 1 then
-				current_inventory_selection=#p.inventory
-			end
+				if btnp(⬅️) then current_inventory_selection-=1 end
+				if btnp(➡️) then current_inventory_selection+=1 end
 
-			if current_inventory_action > #inventory_actions then
+				if current_inventory_selection > #p.inventory then
+					current_inventory_selection=1
+				end
+
+				if current_inventory_selection < 1 then
+					current_inventory_selection=#p.inventory
+				end
+
+				-- update object actions
+				local actions={}
+				if p.inventory[current_inventory_selection].use~=nil then
+					add(actions,"use")
+				end
+				add(actions,"throw")
+				inventory_actions=actions
 				current_inventory_action=1
-			end
-			if current_inventory_action < 1 then
-				current_inventory_action=#current_inventory_action
+				
+			elseif btnp(⬇️) or btnp(⬆️) then
+
+				if btnp(⬇️) then current_inventory_action+=1 end
+				if btnp(⬆️) then current_inventory_action-=1 end
+
+				if current_inventory_action > #inventory_actions then
+					current_inventory_action=1
+				end
+				if current_inventory_action < 1 then
+					current_inventory_action=#current_inventory_action
+				end
+
+				printh(inventory_actions[current_inventory_action])
+
+			elseif btnp(🅾️) then
+				if inventory_actions[current_inventory_action]=="throw" then
+					deli(p.inventory,current_inventory_selection)
+				end
 			end
 		end
 
@@ -244,6 +267,7 @@ function update_game()
 			current_inventory_selection=1
 			game_state="action_selection"
 		end
+
 	end
 
 	if game_state=="enter_building" then update_game_enter_building() end
@@ -340,13 +364,12 @@ function draw_game()
 	end
 	
 	if game_state=="inventory" then
-		rectfill(17,17,122,122,1)
-		rectfill(15,15,120,120,2)
-		rectfill(15,15,120,21,1)
+		rectfill(8,8,127,127,2)
+		rectfill(8,8,127,18,1)
 		
 		print(
 			"inventory ("..#p.inventory.."/"..p.max_inventory_size..")",
-			38,16,7
+			38,11,7
 		)
 		
 		for i=1,p.max_inventory_size do
@@ -376,26 +399,20 @@ function draw_game()
 			print(o.description,20,60,7)
 
 			local box_x=82
-			local box_y=95
-			local box_w=35
-			local box_h=22
+			local box_y=127-8-#inventory_actions*9
+			local box_w=42
+			local box_h=#inventory_actions*8+12 --@todo fix the height
 
 			line(box_x+1,box_y,box_x+box_w-1,box_y,1)
 			line(box_x+1,box_y+box_h,box_x+box_w-1,box_y+box_h,1)
 			line(box_x,box_y+1,box_x,box_y+box_h-1,1)
 			line(box_x+box_w,box_y+1,box_x+box_w,box_y+box_h-1,1)
 
-			print("use",box_x+6,box_y+6,0)
-			if inventory_actions[current_inventory_action]=="use" then
-				print("use",box_x+5,box_y+5,7)
-			else
-				print("use",box_x+5,box_y+5,6)
-			end
-			print("throw",box_x+6,box_y+6+8,0)
-			if inventory_actions[current_inventory_action]=="throw" then
-				print("throw",box_x+5,box_y+5+8,7)
-			else
-				print("throw",box_x+5,box_y+5+8,6)
+			for i,action in ipairs(inventory_actions) do
+				local c=6
+				if inventory_actions[current_inventory_action]==action then c=7 end
+				print(action,box_x+6,box_y+6+(i-1)*8,1)
+				print(action,box_x+5,box_y+5+(i-1)*8,c)
 			end
 
 		end
