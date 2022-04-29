@@ -144,6 +144,7 @@ function init_game()
 		local job = get_a_job()
 		add(players, {
 			hp=6,
+			hp_max=6,
 			actions=4,
 			x=x,		-- pos x on the grid
 			y=y,		-- pos y on the grid
@@ -184,8 +185,7 @@ function update_game()
 		if (btnp(⬆️)) move_to_next_action(-1)
 		if (btnp(🅾️)) do_action()
 		-- check user selection cycling
-		if (current_player>#players) current_player=1
-		if (current_player<1) current_player=#players
+		current_player=mid(1,current_player,#players)
 	end
 
 	if game_state=="move" then
@@ -225,39 +225,23 @@ function update_game()
 				if btnp(⬅️) then current_inventory_selection-=1 end
 				if btnp(➡️) then current_inventory_selection+=1 end
 
-				if current_inventory_selection > #p.inventory then
-					current_inventory_selection=1
-				end
+				current_inventory_selection=mid(1,current_inventory_selection,#p.inventory)
 
-				if current_inventory_selection < 1 then
-					current_inventory_selection=#p.inventory
-				end
-
-				-- update object actions
-				local actions={}
-				if p.inventory[current_inventory_selection].use~=nil then
-					add(actions,"use")
-				end
-				add(actions,"throw")
-				inventory_actions=actions
-				current_inventory_action=1
+				update_object_actions()
 				
 			elseif btnp(⬇️) or btnp(⬆️) then
 
 				if btnp(⬇️) then current_inventory_action+=1 end
 				if btnp(⬆️) then current_inventory_action-=1 end
 
-				if current_inventory_action > #inventory_actions then
-					current_inventory_action=1
-				end
-				if current_inventory_action < 1 then
-					current_inventory_action=#current_inventory_action
-				end
-
-				printh(inventory_actions[current_inventory_action])
+				current_inventory_action=mid(1,current_inventory_action,#inventory_actions)
 
 			elseif btnp(🅾️) then
 				if inventory_actions[current_inventory_action]=="throw" then
+					deli(p.inventory,current_inventory_selection)
+				end
+				if inventory_actions[current_inventory_action]=="use" then
+					p.inventory[current_inventory_selection].use()
 					deli(p.inventory,current_inventory_selection)
 				end
 			end
@@ -273,6 +257,19 @@ function update_game()
 	if game_state=="enter_building" then update_game_enter_building() end
 end
 
+function update_object_actions()
+	local p=players[current_player]
+	-- update object actions
+	local actions={}
+	add(actions,"view")
+	if p.inventory[current_inventory_selection].use~=nil then
+		add(actions,"use")
+	end
+	add(actions,"throw")
+	inventory_actions=actions
+	current_inventory_action=1
+end
+
 -- navigate between the current player actions
 function move_to_next_action(direction)
 	local keys=get_table_keys(actions)
@@ -285,8 +282,7 @@ function move_to_next_action(direction)
 	-- go to next index
 	index+=direction
 	-- check new index is in boundaries
-	if (index>#actions) index=1
-	if (index<1) index=#actions
+	index=mid(1,index,#actions)
 	-- modify current action
 	current_action=actions[keys[index]]
 end
@@ -326,6 +322,7 @@ function do_action()
 	end
 	if current_action.name=="inventory" then
 		current_inventory_selection=1
+		update_object_actions()
 		game_state="inventory"
 	end
 end
@@ -395,13 +392,21 @@ function draw_game()
 			print(o.name,21,46,0)
 			print(o.name,20,45,7)
 
-			print(o.description,21,61,0)
-			print(o.description,20,60,7)
+			if inventory_actions[current_inventory_action]=="view" then
+				print(o.description,21,61,0)
+				print(o.description,20,60,7)
+			end
 
-			local box_x=82
-			local box_y=127-8-#inventory_actions*9
+			if inventory_actions[current_inventory_action]=="throw" then
+				local text="press 🅾️ to throw"
+				print(text,21,61,0)
+				print(text,20,60,7)
+			end
+
 			local box_w=42
-			local box_h=#inventory_actions*8+12 --@todo fix the height
+			local box_h=5+(#inventory_actions*8)+1
+			local box_x=82
+			local box_y=127-box_h-3
 
 			line(box_x+1,box_y,box_x+box_w-1,box_y,1)
 			line(box_x+1,box_y+box_h,box_x+box_w-1,box_y+box_h,1)
@@ -788,13 +793,17 @@ objects = {
 		description="recover 1♥",
 		use=function()
 			local p=players[current_player]
-			p.hp+=1
+			p.hp=mid(0,p.hp+1,p.hp_max)
 		end
 	},
 	survival_book={
 		sprite=81,
 		name="survival book",
 		description="add 1 max ♥",
+		use=function()
+			local p=players[current_player]
+			p.hp_max=mid(6,p.hp_max+1,9)
+		end
 	},
 	toothpaste={
 		sprite=0,
@@ -825,6 +834,10 @@ objects = {
 		sprite=97,
 		name="care kit",
 		description="recover 2♥",
+		use=function()
+			local p=players[current_player]
+			p.hp=mid(0,p.hp+2,p.hp_max)
+		end
 	},
 	stethoscope={
 		sprite=80,
