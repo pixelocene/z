@@ -141,7 +141,16 @@ function init_game()
 	-- init players
 	for i=1,4 do
 		local x,y = rnd_start_location()
-		local job = get_a_job()
+		local job, job_already_taken
+		repeat
+			job_already_taken=false
+			job = get_a_job()
+			for player in all(players) do
+				if player.job.name==job.name then
+					job_already_taken=true
+				end
+			end
+		until not job_already_taken
 		add(players, {
 			hp=6,
 			hp_max=6,
@@ -180,13 +189,9 @@ function update_game()
 	end
 	-- handle user interaction
 	if game_state=="action_selection" then
-		if (btnp(⬅️)) current_player-=1
-		if (btnp(➡️)) current_player+=1	
 		if (btnp(⬇️)) move_to_next_action(1)
 		if (btnp(⬆️)) move_to_next_action(-1)
 		if (btnp(🅾️)) do_action()
-		-- check user selection cycling
-		current_player=mid(1,current_player,#players)
 	end
 
 	if game_state=="move" then
@@ -253,6 +258,13 @@ function update_game()
 			game_state="action_selection"
 		end
 
+	end
+
+	if game_state=="switch_user" then
+		if btnp(⬇️) then current_player+=1 end
+		if btnp(⬆️) then current_player-=1 end
+		current_player=mid(1,current_player,#players)
+		if btnp(❎) then game_state="action_selection" end
 	end
 
 	if game_state=="enter_building" then update_game_enter_building() end
@@ -325,6 +337,9 @@ function do_action()
 		current_inventory_selection=1
 		update_object_actions()
 		game_state="inventory"
+	end
+	if current_action.name=="switch" then
+		game_state="switch_user"
 	end
 end
 
@@ -422,6 +437,49 @@ function draw_game()
 			end
 
 		end
+	end
+
+	if game_state=="switch_user" then
+		rectfill(8,8,127,127,2)
+		rectfill(8,8,127,18,1)
+		
+		print(
+			"switch user",
+			45,11,7
+		)
+
+		local box_w=104
+		local box_h=20
+		local box_x=15
+		local box_col
+
+		for i,player in ipairs(players) do
+			local box_y=25+(i-1)*box_h+(i-1)*5
+			printh(current_player)
+			if i==current_player then box_col=7 else box_col=1 end
+			-- draw box
+			line(box_x,box_y,box_x+box_w,box_y,box_col)
+			line(box_x,box_y+box_h,box_x+box_w,box_y+box_h,box_col)
+			line(box_x-1,box_y+1,box_x-1,box_y+box_h-1,box_col)
+			line(box_x+box_w+1,box_y+1,box_x+box_w+1,box_y+box_h-1,box_col)
+			-- draw box content
+			palt(0,false)
+			palt(14,true)
+			spr(player.job.sprite,box_x+2,box_y+2)
+			palt(0,true)
+			palt(14,false)
+			print(player.job.name,box_x+13, box_y+4,1)
+			print(player.job.name,box_x+12, box_y+3,6)
+
+			local hp="hp:"..p.hp.."/"..p.hp_max
+			print(hp,box_x+81, box_y+4,1)
+			print(hp,box_x+80, box_y+3,6)
+
+			local ap="ap:"..p.actions.."/"..p.actions_max
+			print(ap,box_x+81, box_y+14,1)
+			print(ap,box_x+80, box_y+13,6)
+		end
+
 	end
 
 	if info_message.message~=nil then
@@ -539,7 +597,7 @@ function current_player_can_go_to(x,y)
 	return true
 end
 
--->8❎
+-->8
 -- players
 
 function get_building_for_player()
@@ -713,40 +771,45 @@ function draw_actions()
 	
 	rectfill(0,8,7,127,1)
 	
-	if current_action.name=="move" then
+	if current_action.name=="switch" then
 		rectfill(0,10,7,18,14)
+	end
+
+	if current_action.name=="move" then
+		rectfill(0,20,7,28,14)
 	end
 	
 	if current_action.name=="search" then
-		rectfill(0,20,7,28,14)
-	end
-
-	if current_action.name=="inventory" then
 		rectfill(0,30,7,38,14)
 	end
 
-	if current_action.name=="fight" then
+	if current_action.name=="inventory" then
 		rectfill(0,40,7,48,14)
+	end
+
+	if current_action.name=="fight" then
+		rectfill(0,50,7,58,14)
 	end
 	
 	if current_action.name=="exchange" then
-		rectfill(0,50,7,58,14)
+		rectfill(0,60,7,68,14)
 	end
 
 	if current_action.name=="special" then
-		rectfill(0,60,7,68,14)
+		rectfill(0,70,7,78,14)
 	end
 		
 	if current_action.name=="turn end" then
 		rectfill(0,120,7,128,14)
 	end
 	
-	spr(48,0,10) -- move
-	spr(50,0,20) -- search
-	spr(43,0,30) -- inventory
-	spr(51,0,40) -- fight
-	spr(49,0,50) -- exchange
-	spr(p.job.action.sprite,0,60) -- player special action
+	spr(42,0,10) -- move
+	spr(48,0,20) -- move
+	spr(50,0,30) -- search
+	spr(43,0,40) -- inventory
+	spr(51,0,50) -- fight
+	spr(49,0,60) -- exchange
+	spr(p.job.action.sprite,0,70) -- player special action
 	
 	spr(59,0,120) -- turn end
 end
@@ -1194,6 +1257,10 @@ jobs = {
 	
 actions = {
 	{
+		name="switch",
+		description="switcher player"
+	},
+	{
 		name="move",
 		description="move the player",
 	},
@@ -1241,13 +1308,13 @@ __gfx__
 80000008ee3331eeee3331eeee0001eeee0001ee000000000000000000000000000000000000000000000000eeddd1eeeeddd1ee555665555556655555566555
 88800888ee3131eeeee311eeee0101eeeee01eee000000000000000000000000000000000000000000000000eed1d1eeeee1d1ee555555555555555555555555
 88000088eeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000000000000000000000000eeeeeeee555555555555555555555555
-80000008ee33331eee33331e000000000000000000000000000000000000000000000000000000000000000000077000eeeeeeee555665555556655555566555
-00000000ee3a3a1eee3a3a1e00000000000000000000000000000000000000000000000000000000000000000000000099599599555665555556655555566555
-00000000ee33331eee33331e00000000000000000000000000000000000000000000000000000000000000000007700095995995555666655666666556666555
-00000000ee3831eeee3831ee00000000000000000000000000000000000000000000000000000000000000000007700059959959555666655666666556666555
-00000000e333331eee3331ee00000000000000000000000000000000000000000000000000000000000000000007700019111191555665555556655555566555
-80000008ee3381eeee3381ee000000000000000000000000000000000000000000000000000000000000000000077070e9eeee9e555665555556655555566555
-88000088ee3131eeeee31eee000000000000000000000000000000000000000000000000000000000000000000000000919ee919555555555555555555555555
+80000008ee33331eee33331e000000000000000000000000000000000000000000000000000000000777707000077000eeeeeeee555665555556655555566555
+00000000ee3a3a1eee3a3a1e00000000000000000000000000000000000000000000000000000000070700070000000099599599555665555556655555566555
+00000000ee33331eee33331e00000000000000000000000000000000000000000000000000000000077770700007700095995995555666655666666556666555
+00000000ee3831eeee3831ee00000000000000000000000000000000000000000000000000000000077700000007700059959959555666655666666556666555
+00000000e333331eee3331ee00000000000000000000000000000000000000000000000000000000777770070007700019111191555665555556655555566555
+80000008ee3381eeee3381ee000000000000000000000000000000000000000000000000000000000777007000077070e9eeee9e555665555556655555566555
+88000088ee3131eeeee31eee000000000000000000000000000000000000000000000000000000000707000700000000919ee919555555555555555555555555
 000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000eeeeeeee555555555555555555555555
 000070000070000000770000007777000777777000000070000000000777777000700700000770000077770007770000eeeeeeea555665555556655555566555
 000077000777777007007000007000000770077000777500070770700777777000700700007777000000700000700770eeeeee41555665555556655555566555
