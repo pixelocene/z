@@ -471,11 +471,11 @@ function draw_game()
 			print(player.job.name,box_x+13, box_y+4,1)
 			print(player.job.name,box_x+12, box_y+3,6)
 
-			local hp="hp:"..p.hp.."/"..p.hp_max
+			local hp="hp:"..player.hp.."/"..player.hp_max
 			print(hp,box_x+81, box_y+4,1)
 			print(hp,box_x+80, box_y+3,6)
 
-			local ap="ap:"..p.actions.."/"..p.actions_max
+			local ap="ap:"..player.actions.."/"..player.actions_max
 			print(ap,box_x+81, box_y+14,1)
 			print(ap,box_x+80, box_y+13,6)
 		end
