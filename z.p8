@@ -455,7 +455,6 @@ function draw_game()
 
 		for i,player in ipairs(players) do
 			local box_y=25+(i-1)*box_h+(i-1)*5
-			printh(current_player)
 			if i==current_player then box_col=7 else box_col=1 end
 			-- draw box
 			line(box_x,box_y,box_x+box_w,box_y,box_col)
@@ -937,7 +936,7 @@ objects = {
 		description="recover 2 action points",
 		use=function()
 			local p=players[current_player]
-			p.actions=mid(2,p.actions+2,#p.actions_max)
+			p.actions=mid(2,p.actions+2,p.actions_max)
 		end
 	},
 	bulletproof_vest={
@@ -1008,9 +1007,9 @@ objects = {
 		sprite=103,
 		name="energy drink",
 		description="recover 1 action point",
-		action=function()
+		use=function()
 			local p=players[current_player]
-			p.actions=mid(1,p.actions+1,#p.actions_max)
+			p.actions=mid(1,p.actions+1,p.actions_max)
 		end,
 	},
 	tool_bag={
