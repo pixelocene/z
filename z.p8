@@ -71,7 +71,7 @@ end
 -- game
 
 function init_game()
-	turn=1
+	turn=0
 	game_state="action_selection"
 
 	areas={}
@@ -100,6 +100,8 @@ function init_game()
 	current_inventory_selection=nil
 	inventory_actions={}
 	current_inventory_action=1
+
+	zombies={}
 
 	-- init areas
 	repeat
@@ -171,6 +173,15 @@ function init_game()
 
 	_update=update_game
 	_draw=draw_game
+
+	new_turn()
+end
+
+function new_turn()
+	turn+=1
+	for i=1,3 do
+		generate_zombie()
+	end
 end
 
 function update_game()
@@ -594,6 +605,51 @@ function current_player_can_go_to(x,y)
 	end
 	-- all is right
 	return true
+end
+
+-->8
+-- zombies
+
+function generate_zombie()
+	-- List all available "street" tiles
+	local available_street_tiles={}
+	for x=1,15 do
+		for y=1,15 do
+			local is_occupied=false
+			local is_street_tile=false
+			local s=mget(x,y)
+			for street_tile in all({14,15,29,30,31,45,46,47,61,62,63}) do
+				if s==street_tile then
+					is_street_tile=true
+				end
+			end
+			for player in all(players) do
+				if player.x==x and player.y==y then
+					is_occupied=true
+				end
+			end
+			for zombie in all(zombies) do
+				if zombie.x==x and zombie.y==y then
+					is_occupied=true
+				end
+			end
+			-- @todo check for baricades and bombs
+			if is_street_tile and not is_occupied then
+				add(available_street_tiles,"toto")
+			end
+		end
+	end
+	printh(#available_street_tiles)
+	--local coords=available_street_tiles[rnd(#available_street_tiles)]
+	local coords=available_street_tiles[0]
+	--printh(coords)
+	-- create a zombie and add him to the list
+	add(zombies,{
+		hp=1,
+		actions=2,
+		x=coords.x,
+		y=coords.y,
+	})
 end
 
 -->8
